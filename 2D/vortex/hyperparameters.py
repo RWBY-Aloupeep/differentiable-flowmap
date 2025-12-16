@@ -21,7 +21,7 @@ sub_optimize=False
 output_image_frame = False
 add_passive_scalar = True
 poisson_output_log = False
-backward_u = True
+backward_u = False
 add_control_force = False
 viscosity = 0.0
 
