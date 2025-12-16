@@ -19,7 +19,7 @@ sub_iters = 5
 
 sub_optimize=False
 output_image_frame = False
-add_passive_scalar = False
+add_passive_scalar = True
 poisson_output_log = False
 backward_u = True
 add_control_force = False
