@@ -85,7 +85,7 @@ class OptimizerSimple:
         save_u_target_dir = os.path.join(log_target_dir, save_u_target_dir)
         self.save_u_target_dir = save_u_target_dir
         self.simulator = LFM_Diff_Simulator(res_x,res_y,dx, act_dt, reinit_every,save_u_dir,save_u_target_dir)
-        self.use_lbfgsb = True 
+        self.use_lbfgsb = False
         self.lbfgsb_state = None  
         self.lbfgsb_iter = 0  
 
@@ -520,7 +520,7 @@ if __name__ == '__main__':
     write_file([f"iter:{opt.opt_iter}-"+"[loss:]"]+opt.history_loss,log_file)
     write_file([f"iter:{opt.opt_iter}-"+"[theta:]"]+opt.history_theta[-1],log_file)
     write_file([f"iter:{opt.opt_iter}-"+"[gradient:]"]+[],log_file)
-    while(True):
+    for _ in range(20):
         opt.iter()
         write_file([f"iter:{opt.opt_iter}-"+"[loss:]"]+opt.history_loss,log_file)
         write_file([f"iter:{opt.opt_iter}-"+"[theta:]"]+opt.history_theta[-1],log_file)
