@@ -339,8 +339,8 @@ Grid-based MGPCG solver for the possion equation.
 
             if rTr < tol:
                 end_t = time.time()
-                if(poisson_output_log):
-                    print("[MGPCG] Converged at iter: ", it, " with final error: ", math.sqrt(rTr), " using time: ", end_t-start_t)
+                # if(poisson_output_log):
+                    # print("[MGPCG] Converged at iter: ", it, " with final error: ", math.sqrt(rTr), " using time: ", end_t-start_t)
                 return
 
             if all_neumann:
@@ -363,8 +363,8 @@ Grid-based MGPCG solver for the possion equation.
             it += 1
 
         end_t = time.time()
-        if(poisson_output_log):
-            print("[MGPCG] Return without converging at iter: ", it, " with final error: ", math.sqrt(rTr), " using time: ", end_t-start_t)
+        # if(poisson_output_log):
+            # print("[MGPCG] Return without converging at iter: ", it, " with final error: ", math.sqrt(rTr), " using time: ", end_t-start_t)
 
 
 class MGPCG_2_solid(MGPCG):
