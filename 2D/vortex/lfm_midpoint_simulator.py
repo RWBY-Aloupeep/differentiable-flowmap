@@ -513,7 +513,7 @@ class LFM_Simulator:
             #self.disk_manage.force_write("psi_xy",self.flowmap_psi_xy_dir)
             #self.disk_manage.force_write("psi",self.flowmap_psi_dir)
             #self.disk_manage.force_write("T",self.flowmap_T_dir)
-        print(self.step_num[None], self.final_condition())
+        # print(self.step_num[None], self.final_condition())
         return output_frame, self.final_condition()
         
     def step_flow_map(self,j,curr_dt,write_flow_map, write_passive, 

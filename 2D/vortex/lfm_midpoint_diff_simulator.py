@@ -254,7 +254,7 @@ class LFM_Diff_Simulator(LFM_Simulator):
                 self.disk_manage.read_disk_with_cache(self.adj_passive2,"adj_s2",self.gradient_passive_dir, self.step_num[None])
                 self.disk_manage.read_disk_with_cache(self.adj_passive3,"adj_s3",self.gradient_passive_dir, self.step_num[None])
 
-        print(self.step_num[None], self.final_condition())
+        # print(self.step_num[None], self.final_condition())
         return  output_frame, self.step_num[None] == 0
         
     def backtrack_flow_map(self,j,curr_dt,control_force_para=None):
