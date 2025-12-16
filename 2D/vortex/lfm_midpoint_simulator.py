@@ -403,7 +403,8 @@ class LFM_Simulator:
         self.viscosity = 0.0
         if forward:
             if target:
-                self.boundary_mask.from_numpy(np.load(r"data/leaf_mask_256_scaled.npz")["mask"].astype(np.float32))
+                # self.boundary_mask.from_numpy(np.load(r"data/leaf_mask_256_scaled.npz")["mask"].astype(np.float32))
+                self.boundary_mask.fill(0.0)
                 self.boundary_vel.fill(0.0)
                 eight_vortex_vel_func(self.u,self.X)
                 #eight_vortex_vel_func_with_coef2(self.u,self.X)
@@ -415,7 +416,8 @@ class LFM_Simulator:
                     copy_to(self.passive2, self.init_passive2)
                     copy_to(self.passive3, self.init_passive3)
             else:
-                self.boundary_mask.from_numpy(np.load(r"data/leaf_mask_256_scaled.npz")["mask"].astype(np.float32))
+                # self.boundary_mask.from_numpy(np.load(r"data/leaf_mask_256_scaled.npz")["mask"].astype(np.float32))
+                self.boundary_mask.fill(0.0)
                 self.boundary_vel.fill(0.0)
                 sixteen_vortex_vel_func_with_pos_coef(self.u,self.X,ti.Vector(theta))
                 split_central_vector(self.u,self.u_x,self.u_y)
