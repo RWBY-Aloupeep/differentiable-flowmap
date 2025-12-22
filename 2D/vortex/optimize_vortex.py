@@ -166,36 +166,43 @@ class OptimizerSimple:
         print(f"Dynamic LR: alpha1={self.alpha1:.2e}, alpha2={self.alpha2:.2e}, alpha3={self.alpha3:.2e}")
         return self.alpha1, self.alpha2, self.alpha3
 
-    def calculate_dtheta_ind(self, ind, theta,simulator:LFM_Diff_Simulator):
+    def _compute_velocity_partials(self, simulator: LFM_Diff_Simulator, theta):
+        sixteen_vortex_vel_func_with_pos_coef(simulator.u, simulator.X, theta)
+        split_central_vector(simulator.u, simulator.partial_u_x, simulator.partial_u_y)
+        # simulator.solver.Poisson(simulator.partial_u_x, simulator.partial_u_y)
+        return simulator.partial_u_x.to_numpy(), simulator.partial_u_y.to_numpy()
+
+    def calculate_dtheta_ind(self, ind, theta, simulator: LFM_Diff_Simulator):
         new_theta = theta.copy()
         epsilon = 1e-5
         new_theta[ind] += epsilon
 
-        sixteen_vortex_vel_func_with_pos_coef(simulator.u,simulator.X,theta)
-        split_central_vector(simulator.u,simulator.partial_u_x,simulator.partial_u_y)
-        # simulator.solver.Poisson(simulator.partial_u_x, simulator.partial_u_y)
-        u_x1 = simulator.partial_u_x.to_numpy()
-        u_y1 = simulator.partial_u_y.to_numpy()      
+        u_x1, u_y1 = self._compute_velocity_partials(simulator, theta)
+        u_x2, u_y2 = self._compute_velocity_partials(simulator, new_theta)
 
-        sixteen_vortex_vel_func_with_pos_coef(simulator.u,simulator.X,new_theta)
-        split_central_vector(simulator.u,simulator.partial_u_x,simulator.partial_u_y)
-        # simulator.solver.Poisson(simulator.partial_u_x, simulator.partial_u_y)
-        u_x2 = simulator.partial_u_x.to_numpy()
-        u_y2 = simulator.partial_u_y.to_numpy()       
-
-        u_x2 = (u_x2-u_x1)/epsilon
-        u_y2 = (u_y2-u_y1)/epsilon
+        u_x2 = (u_x2 - u_x1) / epsilon
+        u_y2 = (u_y2 - u_y1) / epsilon
 
         u_x = simulator.adj_u_x.to_numpy()
         u_y = simulator.adj_u_y.to_numpy()
-        
-        dtheta = float(np.sum(u_x*u_x2)+np.sum(u_y*u_y2))
-        return dtheta 
+
+        dtheta = float(np.sum(u_x * u_x2) + np.sum(u_y * u_y2))
+        return dtheta
 
     def calculate_dtheta(self, simulator):
+        epsilon = 1e-5
+        base_u_x, base_u_y = self._compute_velocity_partials(simulator, self.theta)
+        adj_u_x = simulator.adj_u_x.to_numpy()
+        adj_u_y = simulator.adj_u_y.to_numpy()
+
         theta_list = []
         for i in range(64):
-            theta_list.append(self.calculate_dtheta_ind(i, self.theta, simulator))
+            new_theta = self.theta.copy()
+            new_theta[i] += epsilon
+            u_x2, u_y2 = self._compute_velocity_partials(simulator, new_theta)
+            u_x2 = (u_x2 - base_u_x) / epsilon
+            u_y2 = (u_y2 - base_u_y) / epsilon
+            theta_list.append(float(np.sum(adj_u_x * u_x2) + np.sum(adj_u_y * u_y2)))
         return theta_list
 
     def update_with_lbfgsb(self, simulator):
