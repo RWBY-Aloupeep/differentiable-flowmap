@@ -183,10 +183,10 @@ class OptimizerSimple:
         u_x2 = (u_x2 - u_x1) / epsilon
         u_y2 = (u_y2 - u_y1) / epsilon
 
-        u_x = simulator.adj_u_x.to_numpy()
-        u_y = simulator.adj_u_y.to_numpy()
+        adj_u_x = simulator.adj_u_x.to_numpy()
+        adj_u_y = simulator.adj_u_y.to_numpy()
 
-        dtheta = float(np.sum(u_x * u_x2) + np.sum(u_y * u_y2))
+        dtheta = float(np.sum(adj_u_x * u_x2) + np.sum(adj_u_y * u_y2))
         return dtheta
 
     def calculate_dtheta(self, simulator):
