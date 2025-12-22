@@ -1,24 +1,20 @@
 from hyperparameters import *
 from taichi_utils import *
-#from mgpcg_solid import *
-from mgpcg import *
 from init_conditions import *
 from io_utils import *
+from mgpcg import *
+# from mgpcg_solid import *
 from flowmap import *
 from lfm_midpoint_diff_simulator import *
-#from neural_buffer import *
-import sys
+# from neural_buffer import *
 from scipy.optimize import minimize
 
 @ti.data_oriented
 class OptimizerSimple:
     def __init__(self):        
-        np.random.seed(42)
-        self.theta = []
-        for i in range(16):
-            self.theta.append((0.4*np.random.rand()-0.2)* 5.) 
-
-        positions = []
+        self.rng = np.random.default_rng(42)
+        theta = []
+        theta.extend(self.rng.uniform(-1.0, 1.0, size=16).tolist())
 
         centers = [
             ti.Vector([0.75, 0.45]),
@@ -30,38 +26,24 @@ class OptimizerSimple:
             ti.Vector([0.85, 0.4]) ,
             ti.Vector([0.85, 0.2]) 
         ]
-        # random init around (-0.2-0.2) range
+        positions = []
         for c in centers:
             for _ in range(2):
-                offset = 0.2 * (np.random.rand(2) - 0.5)
+                offset = self.rng.uniform(-0.1, 0.1, size=2)
                 pos = c + ti.Vector(offset)
                 positions.append(pos)
+        theta.extend([float(p[0]) for p in positions])
+        theta.extend([float(p[1]) for p in positions])
 
-        for pos in positions:
-            self.theta.append(pos[0])
-
-        for pos in positions:
-            self.theta.append(pos[1])
-
-        for i in range(16):
-            self.theta.append(0.2*np.random.rand()+0.5)
-
-        print("self.theta",len(self.theta))
-        print("self.theta",self.theta)
+        theta.extend(self.rng.uniform(0.5, 0.7, size=16).tolist())
+        self.theta = theta
+        
         self.target_theta = 0.5
         self.opt_iter = 0
         
-        self.alpha1 = 3e-4          #3e-4/2#1e-3#3e-4
-        self.alpha2 = 3e-5*2         #3e-5/2#3e-5 ****
-        self.alpha3 = 3e-3               #3e-3/2#3e-4
-
-        # at the begging, no /2
-        #self.alpha1 = 3e-5/2              #3e-4/2#1e-3#3e-4
-        #self.alpha2 = 3e-4/2            #3e-5/2#3e-5 ****
-        #self.alpha3 = 3e-3/2               #3e-3/2#3e-4
-        #self.alpha1 = 5e-6#1e-3#3e-4
-        #self.alpha2 = 3e-6#3e-5 ****
-        #self.alpha3 = 3e-4#3e-4
+        self.alpha1 = 3e-4
+        self.alpha2 = 3e-5*2
+        self.alpha3 = 3e-3
         
         #if(self.opt_iter>20):
         #    self.alpha1 /= 2            
@@ -76,14 +58,13 @@ class OptimizerSimple:
         self.history_theta = [self.theta]
         self.history_gradient = []
         self.history_loss = []
+
         logsdir = os.path.join('logs', exp_name)
-        save_u_dir = "save_u"
-        save_u_dir = os.path.join(logsdir, save_u_dir)
-        
+        save_u_dir = os.path.join(logsdir, "save_u")
         log_target_dir = os.path.join('logs', exp_name+"_target")
-        save_u_target_dir = "save_u"
-        save_u_target_dir = os.path.join(log_target_dir, save_u_target_dir)
+        save_u_target_dir = os.path.join(log_target_dir, "save_u")
         self.save_u_target_dir = save_u_target_dir
+
         self.simulator = LFM_Diff_Simulator(res_x,res_y,dx, act_dt, reinit_every,save_u_dir,save_u_target_dir)
         self.use_lbfgsb = False
         self.lbfgsb_state = None  
@@ -111,7 +92,7 @@ class OptimizerSimple:
             'sk': []
         }
         self.m = 10 
-        for i in range(self.m):
+        for _ in range(self.m):
             self.lbfgsb_state['rho'].append(0.0)
             self.lbfgsb_state['s'].append(np.zeros(len(self.theta)))
             self.lbfgsb_state['y'].append(np.zeros(len(self.theta)))
@@ -120,23 +101,19 @@ class OptimizerSimple:
 
     def apply_regularization(self, reg_coef=0.001):
         strengths = self.theta[48:64]
-        
         reg_term = reg_coef * np.sum(np.square(strengths))
-        
         if hasattr(self.simulator, 'loss'):
             self.simulator.loss += reg_term
-        
         return reg_term
 
-
     def schedule_lr(self):
-        self.alpha1 = 1e-4 / 3.           #3e-4/2#1e-3#3e-4
-        self.alpha2 = 1e-5*2 /3.          #3e-5/2#3e-5 ****
-        self.alpha3 = 1e-3/3.               #3e-3/2#3e-4
+        self.alpha1 = 1e-4 / 3
+        self.alpha2 = 1e-5*2 /3
+        self.alpha3 = 1e-3/3
         if(self.opt_iter>=100):
-            self.alpha1 /= 2            #3e-4/2#1e-3#3e-4
-            self.alpha2 /= 2           #3e-5/2#3e-5 ****
-            self.alpha3 /= 2               #3e-3/2#3e-4          
+            self.alpha1 /= 2
+            self.alpha2 /= 2
+            self.alpha3 /= 2         
     
     def adjust_lr_by_gradient(self, gradient):
         max_grad1 = np.max(np.abs(gradient[0:16]))
@@ -187,17 +164,13 @@ class OptimizerSimple:
             self.alpha3 /= 3
             
         print(f"Dynamic LR: alpha1={self.alpha1:.2e}, alpha2={self.alpha2:.2e}, alpha3={self.alpha3:.2e}")
-        
         return self.alpha1, self.alpha2, self.alpha3
 
     def calculate_dtheta_ind(self, ind, theta,simulator:LFM_Diff_Simulator):
-        new_theta = []
+        new_theta = theta.copy()
         epsilon = 1e-5
-        for i in range(64):
-            if i == ind:
-                new_theta.append(theta[i]+epsilon)
-            else:
-                new_theta.append(theta[i])
+        new_theta[ind] += epsilon
+
         sixteen_vortex_vel_func_with_pos_coef(simulator.u,simulator.X,theta)
         split_central_vector(simulator.u,simulator.partial_u_x,simulator.partial_u_y)
         # simulator.solver.Poisson(simulator.partial_u_x, simulator.partial_u_y)
