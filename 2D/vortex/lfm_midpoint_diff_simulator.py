@@ -1,4 +1,3 @@
-# 
 from hyperparameters import *
 from taichi_utils import *
 #from mgpcg_solid import *
@@ -8,7 +7,6 @@ from io_utils import *
 from flowmap import *
 from lfm_midpoint_simulator import *
 import sys
-
 
 #dx = 1./res_y
 ti.init(arch=ti.cuda, device_memory_GB=8.0, debug = False, default_fp = ti.f32)
@@ -126,28 +124,22 @@ class LFM_Diff_Simulator(LFM_Simulator):
     def init_gradient(self,theta = None):
         self.init(forward=False)
 
-        self.gradient_dir = 'gradient'
-        self.gradient_dir = os.path.join(self.log_dir, self.gradient_dir)
+        self.gradient_dir = os.path.join(self.log_dir, 'gradient')
         os.makedirs(self.gradient_dir, exist_ok=True)
 
-        self.gradient_dir2 = 'gradient2'
-        self.gradient_dir2 = os.path.join(self.log_dir, self.gradient_dir2)
+        self.gradient_dir2 = os.path.join(self.log_dir, 'gradient2')
         os.makedirs(self.gradient_dir2, exist_ok=True)
 
-        self.gradient_passive_dir = 'gradient_passive'
-        self.gradient_passive_dir = os.path.join(self.log_dir, self.gradient_passive_dir)
+        self.gradient_passive_dir = os.path.join(self.log_dir, 'gradient_passive')
         os.makedirs(self.gradient_passive_dir, exist_ok=True)
 
-        self.target_final_dir = 'final'
-        self.target_final_dir = os.path.join(self.log_target_dir , self.target_final_dir)        
+        self.target_final_dir = os.path.join(self.log_target_dir, 'final')        
         
-        self.target_passive_dir = "passive"
-        self.target_passive_dir = os.path.join(self.log_target_dir, self.target_passive_dir)
+        self.target_passive_dir = os.path.join(self.log_target_dir, 'passive')
 
         self.disk_manage.init()
 
-        self.target_final_dir = 'final'
-        self.target_final_dir = os.path.join(self.log_target_dir , self.target_final_dir)
+        self.target_final_dir = os.path.join(self.log_target_dir, 'final')
         self.final_ind = int(self.read_disk("final_ind", self.final_dir, 0)[0])
         final_u_x_np = self.read_disk("u_x", self.final_dir, self.final_ind)
         final_u_y_np = self.read_disk("u_y", self.final_dir, self.final_ind)
@@ -174,7 +166,6 @@ class LFM_Diff_Simulator(LFM_Simulator):
             self.loss /= 3.
         set_cylinder_obstacles(self.boundary_mask,self.boundary_vel)
         #set_boundary_mask(self.boundary_mask,self.boundary_vel)
-
 
         mask_velocity_by_boundary(self.boundary_mask,self.boundary_vel,self.u_x,self.u_y)
         mask_adj_velocity_by_boundary(self.boundary_mask,self.boundary_vel,self.adj_u_x,self.adj_u_y)

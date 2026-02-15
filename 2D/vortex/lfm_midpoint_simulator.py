@@ -268,6 +268,15 @@ class LFM_Simulator:
 
         self.timer = Timer()
 
+        self.short_err = ti.field(float, shape=())
+        self.last_short_reinit_step = -10**9
+        self.short_reinit_count_in_long_window = 0
+        self.current_long_window_id = -1
+        self.total_short_reinit_triggers = 0
+        self.short_reinit_trigger_steps = []
+        self.short_reinit_window_counts = {}
+        self.short_reinit_err_history = []
+
         if(add_control_force):
             self.gaussion_force_num = control_num
             self.gaussion_force_real_num = ti.field(float,shape = ())
@@ -400,6 +409,14 @@ class LFM_Simulator:
         os.makedirs(self.passive_dir, exist_ok=True)
         self.disk_manage.init()
 
+        self.last_short_reinit_step = -10**9
+        self.short_reinit_count_in_long_window = 0
+        self.current_long_window_id = -1
+        self.total_short_reinit_triggers = 0
+        self.short_reinit_trigger_steps = []
+        self.short_reinit_window_counts = {}
+        self.short_reinit_err_history = []
+
         self.viscosity = 0.0
         if forward:
             if target:
@@ -510,6 +527,7 @@ class LFM_Simulator:
             self.disk_manage.force_write("phi_xy",self.flowmap_phi_xy_dir)
             self.disk_manage.force_write("phi",self.flowmap_phi_dir)
             self.disk_manage.force_write("F",self.flowmap_F_dir)
+            self.write_short_reinit_log()
             #self.disk_manage.force_write("psi_xy",self.flowmap_psi_xy_dir)
             #self.disk_manage.force_write("psi",self.flowmap_psi_dir)
             #self.disk_manage.force_write("T",self.flowmap_T_dir)
@@ -543,6 +561,7 @@ class LFM_Simulator:
 
         self.solver.Poisson(self.u_x, self.u_y)
         mask_velocity_by_boundary(self.boundary_mask,self.boundary_vel,self.u_x,self.u_y)
+
         if(add_passive_scalar):
             mask_passive_by_boundary(self.boundary_mask,self.passive1)
             mask_passive_by_boundary(self.boundary_mask,self.passive2)
@@ -612,6 +631,8 @@ class LFM_Simulator:
 
         self.solver.Poisson(self.u_x, self.u_y)
         mask_velocity_by_boundary(self.boundary_mask,self.boundary_vel,self.u_x,self.u_y)
+
+        self.maybe_adaptive_short_reinit(curr_dt)
         if(add_passive_scalar):
             mask_passive_by_boundary(self.boundary_mask,self.passive1)
             mask_passive_by_boundary(self.boundary_mask,self.passive2)
@@ -661,6 +682,66 @@ class LFM_Simulator:
             copy_to(self.u_x, self.init_u_x)
             copy_to(self.u_y, self.init_u_y)
             self.delete_velocity(self.reinit_every)
+            
+    @ti.kernel
+    def compute_round_trip_short_err(self, stride: ti.i32, dx: float):
+        self.short_err[None] = 0.0
+        for i, j in self.X:
+            if i % stride == 0 and j % stride == 0:
+                x = self.X[i, j]
+                y = self.psi_tem[i, j]
+                z = interp_1(self.phi_tem, y, dx)
+                err = (z - x).norm()
+                ti.atomic_max(self.short_err[None], err)
+
+    def write_short_reinit_log(self):
+        log_path = os.path.join(self.log_dir, "short_reinit_log.txt")
+        with open(log_path, "w") as f:
+            f.write(f"total_short_reinit_triggers: {self.total_short_reinit_triggers}\n")
+            f.write(f"trigger_steps: {self.short_reinit_trigger_steps}\n")
+            f.write("triggers_per_long_window:\n")
+            for window_id in sorted(self.short_reinit_window_counts.keys()):
+                f.write(f"  window_{window_id}: {self.short_reinit_window_counts[window_id]}\n")
+            f.write("round_trip_error_history(step, err):\n")
+            for step_num, err in self.short_reinit_err_history:
+                f.write(f"  {step_num}: {err:.8f}\n")
+
+    def maybe_adaptive_short_reinit(self, curr_dt):
+        if not adaptive_short_reinit:
+            return
+
+        step_num = int(self.step_num[None])
+        long_window_id = int(step_num // self.reinit_every)
+        if long_window_id != self.current_long_window_id:
+            self.current_long_window_id = long_window_id
+            self.short_reinit_count_in_long_window = 0
+
+        if step_num - self.last_short_reinit_step < short_reinit_min_interval:
+            return
+        if self.short_reinit_count_in_long_window >= short_reinit_max_per_long_window:
+            return
+
+        reset_to_identity(self.psi_tem, self.psi_x_tem, self.psi_y_tem, self.T_x_tem, self.T_y_tem, self.X, self.X_x, self.X_y)
+        reset_to_identity(self.phi_tem, self.phi_x_tem, self.phi_y_tem, self.F_x_tem, self.F_y_tem, self.X, self.X_x, self.X_y)
+        RK_grid_only_psi(self.psi_tem, self.u_x, self.u_y, self.dx, -curr_dt)
+        RK_grid_only_psi(self.phi_tem, self.u_x, self.u_y, self.dx, curr_dt)
+        self.compute_round_trip_short_err(max(1, short_reinit_stride), self.dx)
+
+        err = float(self.short_err[None])
+        threshold = float(short_reinit_tau * self.dx)
+        self.short_reinit_err_history.append((step_num, err))
+        if err > threshold:
+            reset_to_identity(self.psi, self.psi_x, self.psi_y, self.T_x, self.T_y, self.X, self.X_x, self.X_y)
+            self.last_short_reinit_step = step_num
+            self.short_reinit_count_in_long_window += 1
+            self.total_short_reinit_triggers += 1
+            self.short_reinit_trigger_steps.append(step_num)
+            self.short_reinit_window_counts[long_window_id] = self.short_reinit_count_in_long_window
+            print(
+                f"[adaptive-short-reinit] step={step_num} err={err:.6f} "
+                f"threshold={threshold:.6f} long_window={long_window_id} "
+                f"window_count={self.short_reinit_count_in_long_window} total={self.total_short_reinit_triggers}"
+            )
 
 if __name__ == '__main__':
     logsdir = os.path.join('logs', exp_name)

@@ -11,6 +11,12 @@ BFECC_clamp = False
 RK_number = 2
 use_short_BFECC = False
 
+adaptive_short_reinit = True
+short_reinit_tau = 1.0
+short_reinit_stride = 4
+short_reinit_min_interval = 3
+short_reinit_max_per_long_window = 3
+
 act_dt = 0.01
 frame_per_step = 10
 total_steps = 100
@@ -20,8 +26,8 @@ sub_iters = 30
 sub_optimize=False
 output_image_frame = True
 add_passive_scalar = True
-poisson_output_log = True
-backward_u = True
+poisson_output_log = False
+backward_u = False
 add_control_force = False
 viscosity = 0.0
 
