@@ -70,6 +70,10 @@ class OptimizerSimple:
         self.lbfgsb_state = None  
         self.lbfgsb_iter = 0  
 
+        self.map_eval_sim = None
+        self.map_eval_root = os.path.join("logs", exp_name, "map_reg_eval_shared")
+        self.map_eval_save_u_dir = os.path.join(self.map_eval_root, "save_u")
+
     def init_lbfgsb(self):
         self.lbfgsb_state = {
             'n': len(self.theta),
@@ -204,6 +208,56 @@ class OptimizerSimple:
             u_y2 = (u_y2 - base_u_y) / epsilon
             theta_list.append(float(np.sum(adj_u_x * u_x2) + np.sum(adj_u_y * u_y2)))
         return theta_list
+
+    def map_reg_indices(self):
+        if map_reg_param_group == "strengths":
+            return list(range(48, 64))
+        if map_reg_param_group == "positions":
+            return list(range(16, 48))
+        if map_reg_param_group == "all":
+            return list(range(len(self.theta)))
+        return []
+    
+    def _get_map_eval_sim(self):
+        if self.map_eval_sim is None:
+            os.makedirs(self.map_eval_save_u_dir, exist_ok=True)
+            self.map_eval_sim = LFM_Diff_Simulator(
+                res_x,
+                res_y,
+                dx,
+                act_dt,
+                reinit_every,
+                self.map_eval_save_u_dir,
+            )
+        return self.map_eval_sim
+
+    def evaluate_map_loss(self, theta):
+        if not map_reg_enabled:
+            return 0.0
+
+        os.makedirs(self.map_eval_save_u_dir, exist_ok=True)
+        temp_sim = self._get_map_eval_sim()
+        temp_sim.init(theta)
+        stride = short_reinit_stride
+        return temp_sim.compute_map_quality_loss(
+            steps=map_reg_rollout_steps,
+            eval_every=map_reg_eval_every,
+            stride=max(1, stride),
+        )
+
+    def compute_map_reg_fd_grad(self, theta):
+        indices = self.map_reg_indices()
+        if len(indices) == 0:
+            return 0.0, {}
+
+        base = self.evaluate_map_loss(theta)
+        fd_grad = {}
+        for i in indices:
+            theta_eps = theta.copy()
+            theta_eps[i] += map_reg_fd_eps
+            loss_eps = self.evaluate_map_loss(theta_eps)
+            fd_grad[i] = (loss_eps - base) / map_reg_fd_eps
+        return base, fd_grad
 
     def update_with_lbfgsb(self, simulator):
         if self.lbfgsb_state is None:
@@ -461,12 +515,22 @@ class OptimizerSimple:
                         vmax=1, dpi=dpi_vor)
             if final_flag:
                 break
-        gradient = self.calculate_dtheta(self.simulator)
+        gradient_task = self.calculate_dtheta(self.simulator)
+        gradient = gradient_task.copy()
+
+        map_loss = 0.0
+        grad_map = {}
+        grad_map_vec = np.zeros(len(self.theta), dtype=np.float64)
+        if map_reg_enabled:
+            map_loss, grad_map = self.compute_map_reg_fd_grad(self.theta)
+            for i, gi in grad_map.items():
+                grad_map_vec[i] = gi
+                gradient[i] += map_reg_lambda * gi
+
         if self.use_lbfgsb:
             gradient = self.update_with_lbfgsb(self.simulator)
             print("Using Newton!")
         else:
-            gradient = self.calculate_dtheta(self.simulator)
             for i in range(16):
                 self.theta[i] = self.theta[i] - self.alpha1*gradient[i]
             for i in range(16,48):

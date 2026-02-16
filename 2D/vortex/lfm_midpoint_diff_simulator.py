@@ -15,6 +15,7 @@ ti.init(arch=ti.cuda, device_memory_GB=8.0, debug = False, default_fp = ti.f32)
 class LFM_Diff_Simulator(LFM_Simulator):
     def __init__(self, res_x, res_y, dx,dt, reinit_every, save_u_dir,save_u_target_dir = None):
         super().__init__(res_x, res_y, dx,dt, reinit_every, save_u_dir,save_u_target_dir)
+        self.loss = 0.0
         self.test_u2 = ti.field(float, shape=(self.res_x+1, self.res_y))
 
         self.adj_u = ti.Vector.field(2, float, shape=(self.res_x, self.res_y))
@@ -49,6 +50,8 @@ class LFM_Diff_Simulator(LFM_Simulator):
         self.partial_u_y = ti.field(float, shape=(self.res_x, self.res_y+1))
 
         self.final_ind = None
+        self.map_loss_acc = ti.field(float, shape=())
+        self.map_loss_count = ti.field(int, shape=())
 
         self.adj_passive1 = ti.field(float, shape=(self.res_x, self.res_y))
         self.target_passive1 = ti.field(float, shape=(self.res_x, self.res_y))
@@ -123,6 +126,7 @@ class LFM_Diff_Simulator(LFM_Simulator):
 
     def init_gradient(self,theta = None):
         self.init(forward=False)
+        self.loss = 0.0
 
         self.gradient_dir = os.path.join(self.log_dir, 'gradient')
         os.makedirs(self.gradient_dir, exist_ok=True)
@@ -202,6 +206,65 @@ class LFM_Diff_Simulator(LFM_Simulator):
         curl(self.u, self.w, dx)
         w_numpy = self.w.to_numpy()
         return w_numpy
+    
+    @ti.kernel
+    def compute_round_trip_short_mse(self, stride: ti.i32, dx: float):
+        self.map_loss_acc[None] = 0.0
+        self.map_loss_count[None] = 0
+        for i, j in self.X:
+            if i % stride == 0 and j % stride == 0:
+                x = self.X[i, j]
+                y = self.psi_tem[i, j]
+                z = interp_1(self.phi_tem, y, dx)
+                err = z - x
+                ti.atomic_add(self.map_loss_acc[None], err.dot(err))
+                ti.atomic_add(self.map_loss_count[None], 1)
+
+    def compute_map_quality_loss(self, steps: int, eval_every: int, stride: int) -> float:
+        total_map_loss = 0.0
+        eval_count = 0
+        eval_every = max(1, int(eval_every))
+        stride = max(1, int(stride))
+
+        for step_idx in range(int(steps)):
+            _, final_flag = self.forward_step_midpoint(False, False)
+            if ((step_idx + 1) % eval_every) == 0:
+                reset_to_identity(
+                    self.psi_tem,
+                    self.psi_x_tem,
+                    self.psi_y_tem,
+                    self.T_x_tem,
+                    self.T_y_tem,
+                    self.X,
+                    self.X_x,
+                    self.X_y,
+                )
+                reset_to_identity(
+                    self.phi_tem,
+                    self.phi_x_tem,
+                    self.phi_y_tem,
+                    self.F_x_tem,
+                    self.F_y_tem,
+                    self.X,
+                    self.X_x,
+                    self.X_y,
+                )
+                vec2scalar(self.mid_u_x, self.mid_u_y, self.u_buffer)
+                vel_x = self.mid_u_x
+                vel_y = self.mid_u_y
+                RK_grid_only_psi(self.psi_tem, vel_x, vel_y, self.dx, -self.dt)
+                RK_grid_only_psi(self.phi_tem, vel_x, vel_y, self.dx, self.dt)
+                self.compute_round_trip_short_mse(stride, self.dx)
+                count = max(1, int(self.map_loss_count[None]))
+                total_map_loss += float(self.map_loss_acc[None]) / float(count)
+                eval_count += 1
+
+            if final_flag:
+                break
+
+        if eval_count == 0:
+            return 0.0
+        return total_map_loss / float(eval_count)
        
     def march_psi_grid(self,dt):
         RK_grid_only_psi( self.psi, self.mid_u_x, self.mid_u_y, self.dx, dt)
