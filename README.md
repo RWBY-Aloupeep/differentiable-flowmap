@@ -1,65 +1,53 @@
-# An Adjoint Method for Differentiable Fluid Simulation on Flow Maps
+# Adaptive Flow-Map Stabilization for Differentiable Vortex-Based Fluid Simulation
 
-This repository contains the official implementation of SIGGRAPH Asia Conference Paper  
-**“An Adjoint Method for Differentiable Fluid Simulation on Flow Maps”**  
-By Zhiqi Li, Jinjin He, Barnabás Börcsök, Taiyuan Zhang, Duowen Chen, Tao Du, Ming C. Lin, Greg Turk & Bo Zhu.  
-Paper available at [arXiv: 2511.01259](https://arxiv.org/abs/2511.01259) (Nov 2025).
+**Adaptive Flow-Map Stabilization** extends differentiable vortex-based fluid simulation with stabilization mechanisms that preserve flow-map invertibility and improve long-horizon optimization reliability.
 
-> 🔗 **Project Page / Demo:** [https://pearseven.github.io/DiffFMProject/](https://pearseven.github.io/DiffFMProject/)  
-> 📄 [**Paper PDF / DOI** ](https://arxiv.org/abs/2511.01259)  
-> 🎥 [**Video Demo** ](https://www.youtube.com/watch?v=C1RrUa53uxU)
+## Background
+Flow-map-based differentiable fluid simulation represents advection through mappings between reference and current particle or grid coordinates, enabling efficient gradient propagation through long simulation windows. In vortex-dominated regimes, however, repeated composition of flow maps can introduce geometric distortion, Jacobian collapse, and numerical stiffness in adjoint backpropagation. These effects degrade optimization quality, especially in long-horizon control and inverse design tasks where stable gradients are essential.
 
----
-## Build Instructions
+## Contributions
+1. **Adaptive Reinitialization**  
+   We monitor distortion-sensitive diagnostics (e.g., local map deformation and Jacobian quality) during rollout. When instability increases, the simulator **reinitializes the flow-map horizon** by restarting composition from a fresh short-term reference state. This limits accumulation of numerical deformation while preserving end-to-end differentiability through segmented trajectories.
 
-This implementation is written entirely in Python 3.9 using Taichi for high-performance simulation.
+2. **Round-Trip Flow-Map Regularization**  
+   We optimize simulation and control variables with an additional **round-trip consistency loss** that enforces agreement between a forward map and its inverse/return map. This regularizer discourages singular map behavior, improves local invertibility, and yields better-conditioned gradients for long-horizon optimization.
 
-### Dependencies
+Together, these mechanisms stabilize map geometry and adjoint signals without requiring fundamental changes to the vortex-based solver architecture.
 
-Install all required packages:
+## Results
+We expect the proposed stabilization strategy to provide:
 
-pip install taichi numpy pillow matplotlib scipy imageio
+- **Higher simulation stability** under strong vortical deformation and extended rollout lengths.
+- **More reliable long-horizon optimization**, with fewer gradient pathologies caused by map degeneration.
+- **Improved vortex control performance** in inverse and trajectory-matching tasks through better-conditioned differentiable dynamics.
 
-
-or using a requirements.txt:
+## Quick Start
+### 1) Environment Setup
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install taichi torch numpy scipy matplotlib imageio
 ```
-taichi>=1.5.0
-numpy
-pillow
-matplotlib
-scipy
-imageio
-```
 
-Then install with:
-```
-pip install -r requirements.txt
-```
-For 3D part, our repo rely on https://github.com/wrc042/AMGPCG_Pybind, a fast MGPCG solver. install it before run 3D code.
-## Usage
-For 2D G->R smoke shape transition
-```
-cd 2D/shape
-python optimize_shape_G_R.py
-```
-For 2D vortex optimization
-```
+### 2) Run a Baseline Optimization
+```bash
 cd 2D/vortex
 python optimize_vortex.py
 ```
-For 3D G->R smoke shape transition
-```
-cd 3D
-optimize_shape_G_R.py
-```
-## Citation
 
-If you find this repository helpful, please cite:
+## Acknowledgement
+This project builds upon the differentiable flow-map framework proposed in:
+
+Li et al., *An Adjoint Method for Differentiable Fluid Simulation on Flow Maps*, 
+ACM SIGGRAPH Asia 2025.
+
+## Reference
 
 ```bibtex
 @inproceedings{li2025adjoint,
-    year = {2025},
-    title = {An Adjoint Method for Differentiable Fluid Simulation on Flow Maps},
-    booktitle = {ACM SIGGRAPH Asia 2025 (Conference Track)},
-    author = {Li, Zhiqi and He, Jinjin and Börcsök, Barnabás and Zhang, Taiyuan and Chen, Duowen and Du, Tao and Lin, Ming C. and Turk, Greg and Zhu, Bo}
-  }
+  year = {2025},
+  title = {An Adjoint Method for Differentiable Fluid Simulation on Flow Maps},
+  booktitle = {ACM SIGGRAPH Asia 2025 (Conference Track)},
+  author = {Li, Zhiqi and He, Jinjin and Börcsök, Barnabás and Zhang, Taiyuan and Chen, Duowen and Du, Tao and Lin, Ming C. and Turk, Greg and Zhu, Bo}
+}
